@@ -3,14 +3,14 @@
 
 #include <Base.hh>
 #include <cstdint>
+#include <cstring>
 
 namespace Course
 {
-    constexpr uint16_t MAX_RUN_LENGTH = 32768;
+    constexpr uint16_t MAX_RUN_LENGTH = 32767;
 
     struct Unit
     {
-        uint8_t length;
         uint8_t data;
     } __attribute__((packed));
 
@@ -45,31 +45,20 @@ namespace Course
             // For now just use a single unit
             Unit unit;
 
-            // perform run length encoding
-            uint16_t i = 0;
-            while (i < inLen)
+            // check if all bytes are the same
+            for (int i = 1; i < inLen; i++)
             {
-                uint16_t j = i + 1;
-                while (j < inLen && buffer[i] == buffer[j])
-                    j++;
-
-                unit.length = j - i;
-                unit.data = buffer[i];
-
-                outBuf[*outLen] = unit.length;
-                outBuf[*outLen + 1] = unit.data;
-
-                // if overflows, just return
-                if (*outLen + 2 > MAX_RUN_LENGTH)
+                if (buffer[i] != buffer[0])
                 {
                     *outLen = 0;
                     return;
                 }
-
-                *outLen += 2;
-
-                i = j;
             }
+
+            unit.data = buffer[0];
+            *outLen = sizeof(Unit);
+
+            memcpy(outBuf, &unit, *outLen);
         }
 
         bool isCompressable(uint8_t buffer[MAX_RUN_LENGTH], uint8_t compBuf[MAX_RUN_LENGTH], uint16_t inLen, uint16_t *outLen)
@@ -79,7 +68,7 @@ namespace Course
             if (*outLen == 0)
                 return false;
             else
-                return *outLen + 2 < inLen;
+                return *outLen + 1 < inLen;
         }
 
         void compress() override
@@ -105,7 +94,7 @@ namespace Course
                     std::cout << "Compressing run of length " << bytesRead << " to " << outLen << std::endl;
                     Frame frame;
                     frame.isRun = 1;
-                    frame.length = outLen;
+                    frame.length = bytesRead;
                     m_output.write(reinterpret_cast<char *>(&frame), sizeof(Frame));
                     m_output.write(reinterpret_cast<char *>(compBuffer), outLen);
                 }
@@ -129,21 +118,22 @@ namespace Course
         void decompress() override
         {
             Frame frame;
+            char buffer[MAX_RUN_LENGTH];
+
             while (m_input.read(reinterpret_cast<char *>(&frame), sizeof(Frame)))
             {
                 if (frame.isRun)
                 {
+                    std::cout << "Decompressing run of length " << frame.length << std::endl;
                     Unit unit;
-                    for (int i = 0; i < frame.length; i += 2)
-                    {
-                        m_input.read(reinterpret_cast<char *>(&unit), sizeof(Unit));
-                        for (int j = 0; j < unit.length; j++)
-                            m_output.put(unit.data);
-                    }
+
+                    // byte stored in Unit.data is repeated frame.length times
+                    m_input.read(reinterpret_cast<char *>(&unit), sizeof(Unit));
+                    for (int i = 0; i < frame.length; i++)
+                        m_output.write(reinterpret_cast<char *>(&unit.data), 1);
                 }
                 else
                 {
-                    char buffer[MAX_RUN_LENGTH];
                     m_input.read(buffer, frame.length);
                     m_output.write(buffer, frame.length);
                 }
