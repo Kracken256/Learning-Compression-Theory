@@ -90,7 +90,7 @@ static std::set<Stat> getAlgorithmStats(const std::string &input, const std::str
         {"Space Savings", 1.0 - ((double)comp.size() / (double)input.size())},
         {"Message Entropy", GetEntropy(input)},
         {"Compressed Entropy", GetEntropy(comp)},
-        {"Entropy Difference", GetEntropy(input) - GetEntropy(comp)},
+        {"Entropy Difference", GetEntropy(comp) - GetEntropy(input)},
     };
 }
 
